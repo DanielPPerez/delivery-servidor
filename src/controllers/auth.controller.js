@@ -3,57 +3,44 @@ import sanitizeHtml from "sanitize-html";
 import bcrypt from 'bcryptjs';
 import { createAccessToken } from "../libs/jwt.js";
 
-
-
-const PrimerLetraMayus = (string) => {
-    const palabras = string.trim().toLowerCase().split(" ");
-    const palabrasMayusculas = palabras.map(
-      (palabra) => palabra.charAt(0).toUpperCase() + palabra.slice(1)
-    );
-    return palabrasMayusculas.join(" ");
-  };
-
-export const register = async (req, res) => {
+  export const register = async (req, res) => {
     try {
-      const { email, password, nombre, apellido, telefono } = req.body;
-  
+      const { email, password, telefono } = req.body;
+
       const userFound = await User.findOne({ email });
-  
+
       if (userFound)
         return res.status(400).json({
-          message: ["El email ya esta en uso"],
+          message: ["El email ya está en uso"],
         });
 
-        const isAdmin =
-        email === "admin@example.com" && password === "adminPassword";
-  
+      const isAdmin = email === "admin@example.com" && password === "adminPassword";
+
       // hashing the password
       const passwordHash = await bcrypt.hash(password, 10);
-  
+
       // creating the user
       const newUser = new User({
-        email: sanitizeHtml(email.toLowerCase()),
-      password: passwordHash,
-      nombre: sanitizeHtml(PrimerLetraMayus(nombre)),
-      apellido: sanitizeHtml(PrimerLetraMayus(apellido)),
-      telefono: sanitizeHtml(telefono),
-      isAdmin: isAdmin,
+        email: email,
+        password: passwordHash,
+        telefono: sanitizeHtml(telefono),
+        isAdmin: isAdmin,
       });
-  
+
       // saving the user in the database
       const userSaved = await newUser.save();
-  
+
       // create access token
       const token = await createAccessToken({
         id: userSaved._id,
       });
-  
+
       res.cookie("token", token, {
         httpOnly: process.env.NODE_ENV !== "development",
         secure: true,
         sameSite: "none",
       });
-  
+
       res.json({
         id: userSaved._id,
         nombre: userSaved.nombre,
@@ -62,7 +49,7 @@ export const register = async (req, res) => {
     } catch (error) {
       res.status(500).json({ message: error.message });
     }
-  };
+};
   
   export const login = async (req, res) => {
     try {

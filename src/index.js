@@ -1,9 +1,9 @@
-import { server } from './app.js';
+// index.js
+import { app, server } from './app.js';
 import { connectDB } from './db.js';
+import { PORT } from './config.js';
 
 connectDB();
-
-const PORT = 3001;
 
 server.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);

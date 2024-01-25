@@ -12,19 +12,7 @@ const userSchema = new mongoose.Schema({
     type: String,
     required: true,
     match: /^[^\s][^\s]*$/,
-  },
-  nombre: {
-    type: String,
-    required: true,
-    match: /^[a-zA-ZñÑáéíóúÁÉÍÓÚüÜ]+(\s[a-zA-ZñÑáéíóúÁÉÍÓÚüÜ]+)?$/,
-    trim: true
-  },
-  apellido: {
-    type: String,
-    required: true,
-    match: /^[a-zA-ZñÑáéíóúÁÉÍÓÚüÜ]+(\s[a-zA-ZñÑáéíóúÁÉÍÓÚüÜ]+)?$/,
-    trim: true
-  },
+  },  
   telefono: {
     type: Number,
     integerOnly: true,
@@ -37,12 +25,6 @@ const userSchema = new mongoose.Schema({
     type: Boolean,
     default: false,
   },
-  compras: [
-    {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "Venta",
-    },
-  ],
 });
 
 export default mongoose.model("Users", userSchema);
