@@ -3,44 +3,55 @@ import sanitizeHtml from "sanitize-html";
 import bcrypt from 'bcryptjs';
 import { createAccessToken } from "../libs/jwt.js";
 
-  export const register = async (req, res) => {
+
+
+const PrimerLetraMayus = (string) => {
+    const palabras = string.trim().toLowerCase().split(" ");
+    const palabrasMayusculas = palabras.map(
+      (palabra) => palabra.charAt(0).toUpperCase() + palabra.slice(1)
+    );
+    return palabrasMayusculas.join(" ");
+  };
+
+export const register = async (req, res) => {
     try {
       const { email, password, telefono } = req.body;
-
+  
       const userFound = await User.findOne({ email });
-
+  
       if (userFound)
         return res.status(400).json({
-          message: ["El email ya está en uso"],
+          message: ["El email ya esta en uso"],
         });
 
-      const isAdmin = email === "admin@example.com" && password === "adminPassword";
-
+        const isAdmin =
+        email === "admin@example.com" && password === "adminPassword";
+  
       // hashing the password
       const passwordHash = await bcrypt.hash(password, 10);
-
+  
       // creating the user
       const newUser = new User({
-        email: email,
-        password: passwordHash,
-        telefono: sanitizeHtml(telefono),
-        isAdmin: isAdmin,
+      email: sanitizeHtml(email.toLowerCase()),
+      password: passwordHash,
+      telefono: sanitizeHtml(telefono),
+      isAdmin: isAdmin,
       });
-
+  
       // saving the user in the database
       const userSaved = await newUser.save();
-
+  
       // create access token
       const token = await createAccessToken({
         id: userSaved._id,
       });
-
+  
       res.cookie("token", token, {
         httpOnly: process.env.NODE_ENV !== "development",
         secure: true,
         sameSite: "none",
       });
-
+  
       res.json({
         id: userSaved._id,
         nombre: userSaved.nombre,
@@ -49,7 +60,7 @@ import { createAccessToken } from "../libs/jwt.js";
     } catch (error) {
       res.status(500).json({ message: error.message });
     }
-};
+  };
   
   export const login = async (req, res) => {
     try {
@@ -70,14 +81,13 @@ import { createAccessToken } from "../libs/jwt.js";
   
       const token = await createAccessToken({
         id: userFound._id,
-        nombre: userFound.nombre,
+        email: userFound.email,
       });
   
       res.cookie("token", token);
   
       res.json({
-        id: userFound._id,
-        nombre: userFound.nombre,
+        id: userFound._id, 
         email: userFound.email,
       });
     } catch (error) {
@@ -118,8 +128,6 @@ import { createAccessToken } from "../libs/jwt.js";
 
    if (!userFound) return res.status(400).json ({message: "usuario no encontrado"});
    return res.json({
-     nombre: userFound.nombre,
-     apellido: userFound.apellido,
      email: userFound.email,
      telefono: userFound.telefono,
    })

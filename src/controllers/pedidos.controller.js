@@ -71,7 +71,23 @@ export const realizarPedido = async (req, res) => {
 
 export const VerificarProductos = async (req, res) => {
   try {
-    const productosAgotados = revisarExistenciaProductos();
+    // Obtener todos los productos
+    const productos = await Producto.find();
+
+    // Verificar productos agotados y actualizar su estado
+    const productosAgotados = [];
+    for (const producto of productos) {
+      if (producto.quantity === 0) {
+        // Marcar como agotado
+        producto.agotado = true;
+        productosAgotados.push(producto.title);
+      } else {
+        // Producto no agotado
+        producto.agotado = false;
+      }
+      // Guardar el cambio en la base de datos
+      await producto.save();
+    }
 
     if (productosAgotados.length > 0) {
       // Si hay productos agotados, notificar a los observadores
