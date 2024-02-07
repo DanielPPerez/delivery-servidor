@@ -7,8 +7,8 @@ import {
   verifyToken
 } from "../controllers/auth.controller.js";
 import { auth } from "../middlewares/auth.middleware.js";
-import { notificaciones, realizarPedido } from "../controllers/pedidos.controller.js";
-import { obtener, crearproducto } from "../controllers/Product.controller.js";
+import { crearPedido, obtenerPedidos,} from '../controllers/pedidos.controller.js';
+import { obtener, crearproducto,} from "../controllers/Product.controller.js";
 
 const router = Router();
 
@@ -20,8 +20,8 @@ router.post("/logout", auth, logout);
 router.get("/verify", verifyToken);
 
 // Rutas relacionadas con los pedidos
-router.get("/notificaciones", notificaciones);
-router.post("/realizar-pedido", realizarPedido);
+router.post('/crearpedido', crearPedido);
+router.get('/obtenerpedidos', obtenerPedidos);
 router.post('/crearproducto', crearproducto);
 router.get('/obtener', obtener);
 

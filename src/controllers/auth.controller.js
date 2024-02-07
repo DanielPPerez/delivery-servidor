@@ -1,9 +1,9 @@
 import User from "../models/Users.model.js";
 import sanitizeHtml from "sanitize-html";
-import bcrypt from 'bcryptjs';
+import jwt from "jsonwebtoken";
+import bcrypt from "bcryptjs";
+import { TOKEN_SECRET } from "../config.js";
 import { createAccessToken } from "../libs/jwt.js";
-
-
 
 const PrimerLetraMayus = (string) => {
     const palabras = string.trim().toLowerCase().split(" ");
@@ -79,21 +79,21 @@ export const register = async (req, res) => {
         });
       }
   
+      // Aquí maneja la redirección según si el usuario es administrador o no
+      let redirectPath = userFound.isAdmin ? '/admin' : '/';
+      
       const token = await createAccessToken({
         id: userFound._id,
         email: userFound.email,
       });
   
-      res.cookie("token", token);
-  
-      res.json({
-        id: userFound._id, 
-        email: userFound.email,
-      });
+      res.cookie("token", token).json({ redirectPath });
     } catch (error) {
       return res.status(500).json({ message: error.message });
     }
   };
+  
+  
 
   export const verifyToken = async (req, res) => {
     const { token } = req.cookies;

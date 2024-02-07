@@ -1,6 +1,11 @@
 import Product from '../models/Products.model.js';
 import multer from 'multer';
 
+import express from 'express';
+const notificationRouter = express.Router();
+const pendingResponses = [];
+
+
 
 const storage = multer.memoryStorage();
 const upload = multer({ storage: storage });
@@ -49,9 +54,24 @@ export const crearproducto = async (req, res) => {
 export const obtener = async (req, res) => {
   try {
     const productos = await Product.find();
-    return res.json(productos);
+    
+    // Mapear productos para incluir la imagen como base64
+    const productosConImagen = productos.map(producto => {
+      return {
+        _id: producto._id,
+        title: producto.title,
+        desc: producto.desc,
+        img: producto.img.toString('base64'), // Convertir la imagen a base64
+        price: producto.price,
+        quantity: producto.quantity,
+        createdAt: producto.createdAt,
+      };
+    });
+
+    return res.json(productosConImagen);
   } catch (error) {
     console.error(error);
     return res.status(500).json({ message: 'Error al recuperar los productos.' });
   }
 };
+

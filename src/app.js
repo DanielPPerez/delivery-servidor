@@ -5,6 +5,7 @@ import morgan from 'morgan';
 import cookieParser from 'cookie-parser';
 import cors from 'cors';
 import authRoutes from './routes/auth.routes.js';
+import { shortPollingRouter,notificationRouter } from './controllers/pedidos.controller.js';
 
 const app = express();
 const server = http.createServer(app);
@@ -22,7 +23,10 @@ app.use(
 app.use(morgan('dev'));
 app.use(express.json());
 app.use(cookieParser());
+app.use('/shortpolling', shortPollingRouter);
+app.use('/notifications',notificationRouter); // Asegúrate de tener la ruta correcta aquí
 app.use("/user", authRoutes);
+
 
 // Objeto para almacenar usuarios conectados
 const connectedUsers = {};

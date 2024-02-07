@@ -25,6 +25,7 @@ const userSchema = new mongoose.Schema({
     type: Boolean,
     default: false,
   },
+  compras: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Pedidos' }],
 });
 
 export default mongoose.model("Users", userSchema);
