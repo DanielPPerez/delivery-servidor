@@ -79,20 +79,23 @@ export const register = async (req, res) => {
         });
       }
   
-      // Aquí maneja la redirección según si el usuario es administrador o no
-      let redirectPath = userFound.isAdmin ? '/admin' : '/';
-      
+      // Crear un token con la propiedad isAdmin
       const token = await createAccessToken({
         id: userFound._id,
         email: userFound.email,
+        isAdmin: userFound.isAdmin,
       });
   
-      res.cookie("token", token).json({ redirectPath });
+      // Devolver el token y la propiedad isAdmin al cliente
+      res.cookie("token", token).json({
+        token,
+        isAdmin: userFound.isAdmin,
+        
+      });
     } catch (error) {
       return res.status(500).json({ message: error.message });
     }
   };
-  
   
 
   export const verifyToken = async (req, res) => {

@@ -2,14 +2,10 @@ import Pedidos from '../models/Pedidos.model.js';
 import Usuario from '../models/Users.model.js';
 import Producto from '../models/Products.model.js';
 import express from 'express';
+
 const notificationRouter = express.Router();
-const pendingResponses = [];
-
-notificationRouter.get('/notifications', (req, res) => {
-  pendingResponses.push(res);
-});
-
 const shortPollingRouter = express.Router();
+const longPollingClients = [];
 
 shortPollingRouter.get('/checkAvailability', async (req, res) => {
   try {
@@ -23,13 +19,18 @@ shortPollingRouter.get('/checkAvailability', async (req, res) => {
   }
 });
 
+notificationRouter.get('/wait', (req, res) => {
+  // Mantener la conexión abierta hasta que haya un nuevo pedido
+  longPollingClients.push(res);
+});
 
+export { notificationRouter, shortPollingRouter };
 
-export { notificationRouter, pendingResponses, shortPollingRouter };
+let numeroPedidoActual = 0; // Variable para mantener el número de pedido actual
 
 export const crearPedido = async (req, res) => {
   try {
-    const { userEmail, detallesVenta } = req.body;
+    const { userEmail, detallesVenta, subtotal, serviceCost, total } = req.body;
 
     const usuario = await Usuario.findOne({ email: userEmail });
 
@@ -37,30 +38,31 @@ export const crearPedido = async (req, res) => {
       return res.status(404).json({ message: 'Usuario no encontrado' });
     }
 
-    let total = 0;
+    let totalProducts = 0;
     const productosComprados = [];
 
     for (const detalle of detallesVenta) {
-      const producto = await Producto.findOne({ title: detalle.title.trim() });
+      const producto = await Producto.findOne({ title: detalle.name.trim() });
 
       if (!producto) {
-        return res.status(404).json({ message: `Producto no encontrado: ${detalle.title}` });
+        return res.status(404).json({ message: `Producto no encontrado: ${detalle.name}` });
       }
 
       // Verificar si hay suficiente cantidad disponible para comprar
       if (detalle.quantity > producto.quantity) {
-        const errorMessage = `Cantidad no disponible para: ${detalle.title}`;
+        const errorMessage = `Cantidad no disponible para: ${detalle.name}`;
         sendErrorResponse(errorMessage, res);
         return;
       }
 
       const pedido = new Pedidos({
         user: usuario._id,
-        products: [{ product: producto._id, quantity: detalle.quantity }],
+        products: [{ product: producto._id, title: detalle.name, quantity: detalle.quantity }],
         totalAmount: detalle.quantity * producto.price,
+        numeroPedido: ++numeroPedidoActual, // Incrementar y asignar el número de pedido
       });
 
-      total += pedido.totalAmount;
+      totalProducts += pedido.totalAmount;
 
       // Restar la cantidad comprada del inventario del producto
       producto.quantity -= detalle.quantity;
@@ -76,18 +78,17 @@ export const crearPedido = async (req, res) => {
     await usuario.save();
     await Promise.all(productosComprados.map(producto => Producto.findByIdAndUpdate(producto._id, { $inc: { quantity: -producto.quantity } })));
 
-    // Enviar notificación de nuevo pedido a clientes mediante long polling
-    while (pendingResponses.length > 0) {
-      const response = pendingResponses.pop();
-      response.json({ alert: { type: "success", message: "Nuevo pedido creado" }, numeroPedido: result._id, userEmail, total });
-    }
+    // Notificar a los clientes de long polling sobre el nuevo pedido
+    notifyLongPollingClients();
 
-    sendSuccessResponse("Pedido creado con éxito", res);
+    // Enviar el número de pedido y la información necesaria al frontend
+    sendSuccessResponse({ numeroPedido: numeroPedidoActual, message: "Pedido creado con éxito" }, res);
   } catch (error) {
     console.error(error);
     sendErrorResponse("Error al crear el pedido", res);
   }
 };
+
 
 function sendSuccessResponse(message, res) {
   res.json({ alert: { type: "success", message } });
@@ -95,9 +96,7 @@ function sendSuccessResponse(message, res) {
 
 function sendErrorResponse(message, res) {
   res.status(500).json({ alert: { type: "error", message } });
-};
-
-
+}
 
 // Controlador para obtener todos los pedidos
 export const obtenerPedidos = async (req, res) => {
@@ -122,3 +121,11 @@ export const obtenerPedidos = async (req, res) => {
     res.status(500).json({ error: 'Error al recuperar los pedidos.' });
   }
 };
+
+// Función para notificar a los clientes de long polling sobre un nuevo pedido
+function notifyLongPollingClients() {
+  while (longPollingClients.length > 0) {
+    const client = longPollingClients.pop();
+    client.json({ numeroPedido: numeroPedidoActual, message: 'Nuevo pedido disponible' });
+  }
+}
