@@ -5,86 +5,72 @@ import morgan from 'morgan';
 import cookieParser from 'cookie-parser';
 import cors from 'cors';
 import authRoutes from './routes/auth.routes.js';
-import { shortPollingRouter,notificationRouter } from './controllers/pedidos.controller.js';
+import { shortPollingRouter, notificationRouter } from './controllers/pedidos.controller.js';
 
 const app = express();
 const server = http.createServer(app);
-const io = new Server(server);
-
-// Configuración más específica de CORS
-app.use(
-  cors({
-    origin: "http://localhost:3000",
+const socketServer = new Server(server, {
+  cors: {
+    origin: "http://localhost:3000", // Update this based on your frontend URL
     methods: ["GET", "POST"],
     credentials: true,
-  })
-);
+  },
+});
 
 app.use(morgan('dev'));
 app.use(express.json());
 app.use(cookieParser());
+app.use(cors()); // Add CORS middleware
 app.use('/shortpolling', shortPollingRouter);
-app.use('/notifications',notificationRouter); // Asegúrate de tener la ruta correcta aquí
+app.use('/notifications', notificationRouter);
 app.use("/user", authRoutes);
 
+let connectedUsers = 0;
+let activeSockets = []; // Store connected sockets
 
-// Objeto para almacenar usuarios conectados
-const connectedUsers = {};
+socketServer.on('connection', (socket) => {
+  console.log('A client has connected');
+  connectedUsers++;
+  activeSockets.push(socket); // Add socket to active sockets array
+  socket.emit('connected_users', { count: connectedUsers });
 
-io.on('connection', (socket) => {
-  console.log(`Usuario Conectado: ${socket.id}`);
-
-  // Manejar la conexión de un nuevo usuario
-  socket.on('register', (user) => {
-    if (connectedUsers[user]) {
-      socket.emit('userExists');
-      return;
-    } else {
-      console.log(`Usuario ${user} se ha unido.`);
-
-      // Guardar la asociación entre el ID del socket y el nombre de usuario
-      socket.username = user;
-      connectedUsers[user] = socket.id;
-
-      // Emitir un evento para actualizar la lista de usuarios conectados a todos los clientes
-      io.emit('activeSessions', getConnectedUsers());
-    }
-  });
-
-  // Manejar la desconexión de un usuario
   socket.on('disconnect', () => {
-    console.log(`Usuario Desconectado: ${socket.username}`);
-
-    // Eliminar al usuario desconectado de la lista de usuarios
-    delete connectedUsers[socket.username];
-
-    // Emitir un evento para actualizar la lista de usuarios conectados a todos los clientes
-    io.emit('activeSessions', getConnectedUsers());
+    connectedUsers--;
+    activeSockets = activeSockets.filter((activeSocket) => activeSocket !== socket);
   });
 
-  // Manejar los mensajes privados
-  socket.on('sendMessagesPrivate', ({ selectUser, message }) => {
-    const recipientSocketId = connectedUsers[selectUser];
+  socket.on('chat_message', (data) => {
+    // Broadcast the message to all connected sockets except the sender
+    socket.broadcast.emit('chat_message', data);
+  });
 
-    if (recipientSocketId) {
-      // Enviar el mensaje privado al destinatario
-      io.to(recipientSocketId).emit('sendMessage', { user: socket.username, message });
-    } else {
-      // Manejar el caso donde el destinatario no está conectado
-      console.log(`Usuario ${selectUser} no está conectado.`);
+  socket.on('get_connected_users', () => {
+    // Send connected users count only to the sender
+    socket.emit('connected_users', { count: connectedUsers });
+  });
+
+  socket.on('private_message', (data) => {
+    // Send a private message to a specific user (identified by socket ID)
+    const { recipientSocketId, message } = data;
+    const recipientSocket = activeSockets.find((socket) => socket.id === recipientSocketId);
+
+    if (recipientSocket) {
+      recipientSocket.emit('private_message', { senderSocketId: socket.id, message });
     }
-  });
-
-  // Manejar los mensajes públicos
-  socket.on('sendMessage', ({ message }) => {
-    // Emitir el mensaje público a todos los clientes
-    io.emit('sendMessage', { user: socket.username, message });
   });
 });
 
-// Función para obtener la lista de usuarios conectados
-function getConnectedUsers() {
-  return Object.values(connectedUsers);
-}
+const pollConnectedUsers = () => {
+  const data = { count: connectedUsers };
+
+  // Send connected users count to all connected sockets
+  activeSockets.forEach((socket) => {
+    socket.emit('connected_users', data);
+  });
+
+  setTimeout(pollConnectedUsers, 5000);
+};
+
+pollConnectedUsers();
 
 export { app, server };
