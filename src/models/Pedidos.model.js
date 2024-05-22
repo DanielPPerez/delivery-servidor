@@ -3,14 +3,14 @@ import mongoose from 'mongoose';
 const PedidosSchema = new mongoose.Schema({
   user: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'Users', // Referencia al modelo de usuarios
+    ref: 'Users', 
     required: true,
   },
   products: [
     {
       product: {
         type: mongoose.Schema.Types.ObjectId,
-        ref: 'Product', // Referencia al modelo de productos
+        ref: 'Product', 
         required: true,
       },
       quantity: {

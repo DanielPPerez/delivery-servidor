@@ -5,13 +5,6 @@ import bcrypt from "bcryptjs";
 import { TOKEN_SECRET } from "../config.js";
 import { createAccessToken } from "../libs/jwt.js";
 
-const PrimerLetraMayus = (string) => {
-    const palabras = string.trim().toLowerCase().split(" ");
-    const palabrasMayusculas = palabras.map(
-      (palabra) => palabra.charAt(0).toUpperCase() + palabra.slice(1)
-    );
-    return palabrasMayusculas.join(" ");
-  };
 
 export const register = async (req, res) => {
     try {
@@ -24,13 +17,10 @@ export const register = async (req, res) => {
           message: ["El email ya esta en uso"],
         });
 
-        const isAdmin =
-        email === "admin@example.com" && password === "adminPassword";
+      const isAdmin =  email === "admin@example.com" && password === "adminPassword";
   
-      // hashing the password
       const passwordHash = await bcrypt.hash(password, 10);
-  
-      // creating the user
+
       const newUser = new User({
       email: sanitizeHtml(email.toLowerCase()),
       password: passwordHash,
@@ -38,10 +28,8 @@ export const register = async (req, res) => {
       isAdmin: isAdmin,
       });
   
-      // saving the user in the database
       const userSaved = await newUser.save();
   
-      // create access token
       const token = await createAccessToken({
         id: userSaved._id,
       });
@@ -136,3 +124,6 @@ export const register = async (req, res) => {
    })
   
   }
+
+
+  

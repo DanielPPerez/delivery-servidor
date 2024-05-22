@@ -5,13 +5,14 @@ import morgan from 'morgan';
 import cookieParser from 'cookie-parser';
 import cors from 'cors';
 import authRoutes from './routes/auth.routes.js';
-import { shortPollingRouter, notificationRouter } from './controllers/pedidos.controller.js';
+import { shortPollingRouter, longPollingRouter } from './controllers/polling.controller.js';
+
 
 const app = express();
 const server = http.createServer(app);
 const socketServer = new Server(server, {
   cors: {
-    origin: "http://localhost:3000", // Update this based on your frontend URL
+    origin: "http://localhost:3000",
     methods: ["GET", "POST"],
     credentials: true,
   },
@@ -20,18 +21,18 @@ const socketServer = new Server(server, {
 app.use(morgan('dev'));
 app.use(express.json());
 app.use(cookieParser());
-app.use(cors()); // Add CORS middleware
-app.use('/shortpolling', shortPollingRouter);
-app.use('/notifications', notificationRouter);
+app.use(cors());
 app.use("/user", authRoutes);
+app.use('/shortPolling', shortPollingRouter);
+app.use('/longPolling', longPollingRouter);
 
 let connectedUsers = 0;
-let activeSockets = []; // Store connected sockets
+let activeSockets = []; 
 
 socketServer.on('connection', (socket) => {
   console.log('A client has connected');
   connectedUsers++;
-  activeSockets.push(socket); // Add socket to active sockets array
+  activeSockets.push(socket); 
   socket.emit('connected_users', { count: connectedUsers });
 
   socket.on('disconnect', () => {

@@ -1,36 +1,13 @@
 import Pedidos from '../models/Pedidos.model.js';
 import Usuario from '../models/Users.model.js';
 import Producto from '../models/Products.model.js';
-import express from 'express';
+import { notifyLongPollingClients } from './polling.controller.js';
 
-const notificationRouter = express.Router();
-const shortPollingRouter = express.Router();
-const longPollingClients = [];
-
-shortPollingRouter.get('/checkAvailability', async (req, res) => {
-  try {
-    const productos = await Producto.find();
-    const productosAgotados = productos.filter(producto => producto.quantity === 0).map(producto => producto.title);
-
-    res.json({ productosAgotados });
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: 'Error al verificar la disponibilidad de productos.' });
-  }
-});
-
-notificationRouter.get('/wait', (req, res) => {
-  // Mantener la conexión abierta hasta que haya un nuevo pedido
-  longPollingClients.push(res);
-});
-
-export { notificationRouter, shortPollingRouter };
-
-let numeroPedidoActual = 0; // Variable para mantener el número de pedido actual
+let numeroPedidoActual = 0;
 
 export const crearPedido = async (req, res) => {
   try {
-    const { userEmail, detallesVenta, subtotal, serviceCost, total } = req.body;
+    const { userEmail, detallesVenta } = req.body;
 
     const usuario = await Usuario.findOne({ email: userEmail });
 
@@ -48,57 +25,42 @@ export const crearPedido = async (req, res) => {
         return res.status(404).json({ message: `Producto no encontrado: ${detalle.name}` });
       }
 
-      // Verificar si hay suficiente cantidad disponible para comprar
       if (detalle.quantity > producto.quantity) {
         const errorMessage = `Cantidad no disponible para: ${detalle.name}`;
-        sendErrorResponse(errorMessage, res);
-        return;
+        return res.status(400).json({ error: errorMessage });
       }
 
       const pedido = new Pedidos({
         user: usuario._id,
         products: [{ product: producto._id, title: detalle.name, quantity: detalle.quantity }],
         totalAmount: detalle.quantity * producto.price,
-        numeroPedido: ++numeroPedidoActual, // Incrementar y asignar el número de pedido
+        numeroPedido: ++numeroPedidoActual,
       });
 
       totalProducts += pedido.totalAmount;
-
-      // Restar la cantidad comprada del inventario del producto
       producto.quantity -= detalle.quantity;
 
       const result = await pedido.save();
-
-      // Agregar el _id del pedido al array 'compras' del usuario
       usuario.compras.push(result._id);
-
       productosComprados.push({ _id: producto._id, quantity: detalle.quantity });
     }
 
     await usuario.save();
     await Promise.all(productosComprados.map(producto => Producto.findByIdAndUpdate(producto._id, { $inc: { quantity: -producto.quantity } })));
 
-    // Notificar a los clientes de long polling sobre el nuevo pedido
-    notifyLongPollingClients();
+    notifyLongPollingClients({
+      numeroPedido: numeroPedidoActual,
+      userEmail,
+      detallesVenta,
+    });
 
-    // Enviar el número de pedido y la información necesaria al frontend
-    sendSuccessResponse({ numeroPedido: numeroPedidoActual, message: "Pedido creado con éxito" }, res);
+    res.json({ numeroPedido: numeroPedidoActual, message: "Pedido creado con éxito" });
   } catch (error) {
     console.error(error);
-    sendErrorResponse("Error al crear el pedido", res);
+    res.status(500).json({ error: "Error al crear el pedido: " + error.message });
   }
 };
 
-
-function sendSuccessResponse(message, res) {
-  res.json({ alert: { type: "success", message } });
-}
-
-function sendErrorResponse(message, res) {
-  res.status(500).json({ alert: { type: "error", message } });
-}
-
-// Controlador para obtener todos los pedidos
 export const obtenerPedidos = async (req, res) => {
   try {
     const pedidos = await Pedidos.find().populate('user').populate('products.product');
@@ -122,10 +84,66 @@ export const obtenerPedidos = async (req, res) => {
   }
 };
 
-// Función para notificar a los clientes de long polling sobre un nuevo pedido
-function notifyLongPollingClients() {
-  while (longPollingClients.length > 0) {
-    const client = longPollingClients.pop();
-    client.json({ numeroPedido: numeroPedidoActual, message: 'Nuevo pedido disponible' });
+export const borrarTodosLosPedidos = async (req, res) => {
+  try {
+    await Pedidos.deleteMany({});
+    res.json({ alert: { type: "success", message: 'Todos los pedidos han sido eliminados' } });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ alert: { type: "error", message: 'Error al borrar los pedidos' } });
   }
-}
+};
+
+export const pagarPedido = async (req, res) => {
+  try {
+    const { pedidoId } = req.params;
+
+    // Marcar el pedido como pagado en la base de datos
+    await Pedidos.findByIdAndUpdate(pedidoId, { pagado: true });
+
+    // Obtener los productos asociados al pedido
+    const pedido = await Pedidos.findById(pedidoId);
+    const productosPedido = pedido.products.map(item => ({ _id: item.product, quantity: item.quantity }));
+
+    // Eliminar los productos asociados al pedido de la base de datos
+    await Promise.all(productosPedido.map(producto => Producto.findByIdAndUpdate(producto._id, { $inc: { quantity: producto.quantity } })));
+
+    res.json({ message: 'Pedido pagado exitosamente y productos eliminados de la base de datos.' });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Error al pagar el pedido y eliminar los productos.' });
+  }
+};
+
+export const obtenerPedidoPorId = async (req, res) => {
+  try {
+    const { pedidoId } = req.params;
+
+    // Obtener el pedido por su ID con todos los detalles
+    const pedido = await Pedidos.findById(pedidoId).populate('user').populate('products.product');
+
+    if (!pedido) {
+      return res.status(404).json({ message: 'Pedido no encontrado.' });
+    }
+
+    res.json({ pedido });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Error al obtener los detalles del pedido.' });
+  }
+};
+
+export const actualizarPedido = async (req, res) => {
+  try {
+    const { pedidoId } = req.params;
+    const { detallesActualizados } = req.body;
+
+    // Actualizar los detalles del pedido en la base de datos
+    await Pedidos.findByIdAndUpdate(pedidoId, { detallesVenta: detallesActualizados });
+
+    res.json({ message: 'Detalles del pedido actualizados correctamente.' });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Error al actualizar los detalles del pedido.' });
+  }
+};
